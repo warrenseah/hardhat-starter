@@ -2,20 +2,21 @@
 
 pragma solidity ^0.8.0;
 
-import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/IAccessControlEnumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "./RewardsToken.sol";
 
-contract Staking {
-    address public owner;
+contract Staking is Ownable {
+    RewardsToken public rewardsToken;
     mapping(string => address) public whitelistedCoin;
     mapping(address => mapping(string => uint256)) public stakingBalance;
     
     constructor() {
-        owner = msg.sender;
+        rewardsToken = new RewardsToken();
     }
 
-    function whitelistCoin(string memory _coin, address _coinAddress) external {
-        require(msg.sender == owner, 'Only owner can whitelist coins');
+    function whitelistCoin(string memory _coin, address _coinAddress) external onlyOwner {
         whitelistedCoin[_coin] = _coinAddress;
     }
 
@@ -34,5 +35,20 @@ contract Staking {
 
         stakingBalance[msg.sender][_coin] -= _amount;
         IERC20(whitelistedCoin[_coin]).transfer(msg.sender, _amount);
+    }
+
+    
+
+    // Access Functions
+    function grantRDSRole(bytes32 _role, address _account) external onlyOwner {
+        IAccessControlEnumerable(rewardsToken).grantRole(_role, _account);
+    }
+
+    function revokeRDSRole(bytes32 _role, address _account) external onlyOwner {
+        IAccessControlEnumerable(rewardsToken).revokeRole(_role, _account);
+    }
+
+    function getRDSRoleCount(bytes32 _role) view external returns(uint256) {
+        return IAccessControlEnumerable(rewardsToken).getRoleMemberCount(_role);
     }
 }
