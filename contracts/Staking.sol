@@ -10,80 +10,82 @@ import "./RewardsToken.sol";
 
 contract Staking is Ownable {
     RewardsToken public rewardsToken;
-    address public paymentToken;
+    IERC20 public stakingToken;
+
+    uint256 public rewardRate = 1e14; // Per second
+    uint256 public lastUpdateTime;
+    uint256 public rewardPerTokenStored;
+    uint256 public _totalSupply;
 
     // userAddress => stakingBalance
-    mapping(address => uint256) public stakingBalance;
-    // userAddress => isStaking boolean
-    mapping(address => bool) public isStaking;
-    // userAddress => timestamp
-    mapping(address => uint256) public startTime;
+    mapping(address => uint256) public balances;
     // userAddress => rewardsBalance
-    mapping(address => uint256) public rewardsBalance;
+    mapping(address => uint256) public rewards;
+    mapping(address => uint256) public userRewardPerTokenPaid;
 
     // Events
     event Stake(address indexed from, uint256 amount);
     event Unstake(address indexed from, uint256 amount);
-    event YieldWithdraw(address indexed to, uint256 amount);
+    event RewardsPaid(address indexed to, uint256 amount);
     
-    constructor() {
+    constructor(address _stakingToken) {
+        stakingToken = IERC20(_stakingToken);
         rewardsToken = new RewardsToken();
     }
 
-    function changePaymentAddress(address _coinAddress) external onlyOwner {
-        paymentToken = _coinAddress;
-    }
-
-    function depositCoin(uint256 _amount) external onlyAcceptedToken {
+    function stake(uint256 _amount) external updateReward(msg.sender) {
         require(_amount > 0, 'Amount cannot be zero');
-        IERC20 token = IERC20(paymentToken);
-        uint256 available = token.balanceOf(msg.sender);
+        uint256 available = stakingToken.balanceOf(msg.sender);
         require(available >= _amount, 'Insufficient coin balance');
-
-        if(isStaking[msg.sender] == true) {
-            uint256 toTransfer = calculateYieldTotal(msg.sender);
-            rewardsBalance[msg.sender] += toTransfer;
-        }
-
-        stakingBalance[msg.sender] += _amount;
-        startTime[msg.sender] = block.timestamp;
-        isStaking[msg.sender] = true;
-        IERC20(paymentToken).transferFrom(msg.sender, address(this), _amount);
+        _totalSupply += _amount;
+        balances[msg.sender] += _amount;
+        stakingToken.transferFrom(msg.sender, address(this), _amount);
         emit Stake(msg.sender, _amount);
     }
 
-    function withdrawCoin(uint256 _amount) external {
+    function withdraw(uint256 _amount) external updateReward(msg.sender) {
         require(_amount > 0, 'Amount cannot be zero');
-        require(stakingBalance[msg.sender] >= _amount, 'Nothing to unstake');
-
-        uint256 yieldTransfer = calculateYieldTotal(msg.sender);
-        delete startTime[msg.sender]; // bug fix
-
-        stakingBalance[msg.sender] -= _amount;
-        IERC20(paymentToken).transfer(msg.sender, _amount);
-        rewardsBalance[msg.sender] += yieldTransfer;
-
-        if(stakingBalance[msg.sender] == 0) {
-            isStaking[msg.sender] = false;
-        }
+        require(balances[msg.sender] >= _amount, 'Nothing to unstake');
+        _totalSupply -= _amount;
+        balances[msg.sender] -= _amount;
+        stakingToken.transfer(msg.sender, _amount);
         emit Unstake(msg.sender, _amount);
-
     }
 
-    function withdrawYield() public {
-        uint256 toTransfer = calculateYieldTotal(msg.sender);
-        require(toTransfer > 0, "Cannot withdraw 0");
-        require(rewardsBalance[msg.sender] > 0, "Nothing to withdraw");
-        
-        uint256 oldBalance = rewardsBalance[msg.sender];
-        rewardsBalance[msg.sender] = 0;
-        toTransfer += oldBalance;
-
-        delete startTime[msg.sender];
-        rewardsToken.mint(msg.sender, toTransfer);
-        emit YieldWithdraw(msg.sender, toTransfer);
+    function getReward() external updateReward(msg.sender) {
+        uint256 reward = rewards[msg.sender];
+        require(reward > 0, 'Reward must be greater than 0 to withdraw');
+        rewards[msg.sender] = 0;
+        rewardsToken.mint(msg.sender, reward);
+        emit RewardsPaid(msg.sender, reward);
     }
 
+    function rewardPerToken() public view returns(uint256) {
+        if(_totalSupply == 0) {
+            return 0;
+        }
+        return rewardPerTokenStored + (((block.timestamp - lastUpdateTime) * rewardRate * 1e18) / _totalSupply);
+    }
+
+    function earned(address account) public view returns(uint256) {
+        return ((balances[account] * (rewardPerToken() - userRewardPerTokenPaid[account])) / 1e18) + rewards[account];
+    }
+
+    // Modifiers
+    modifier updateReward(address account) {
+        rewardPerTokenStored = rewardPerToken();
+        lastUpdateTime = block.timestamp;
+
+        rewards[account] = earned(account);
+        userRewardPerTokenPaid[account] = rewardPerTokenStored;
+        _;
+    }
+
+    // Restricted functions
+    function changeStakingCoinAddress(address _coinAddress) external onlyOwner {
+        stakingToken = IERC20(_coinAddress);
+    }
+    
     // Access Functions
     function grantRDSRole(bytes32 _role, address _account) external onlyOwner {
         IAccessControlEnumerable(rewardsToken).grantRole(_role, _account);
@@ -95,29 +97,5 @@ contract Staking is Ownable {
 
     function getRDSRoleCount(bytes32 _role) view external returns(uint256) {
         return IAccessControlEnumerable(rewardsToken).getRoleMemberCount(_role);
-    }
-
-    // Modifiers
-    modifier onlyAcceptedToken() {
-        require(paymentToken != address(0), "Must only work with a accepted payment token");
-        _;
-    }
-
-    // Helper functions
-
-    function _calculateYieldTime(address user) public view returns(uint256) {
-        uint256 end = block.timestamp;
-        uint256 totalTime = end - startTime[user];
-        return totalTime;
-    }
-
-    function calculateYieldTotal(address user) public view returns(uint256) {
-        uint256 time = _calculateYieldTime(user) * 10**18;
-        uint256 dayInSeconds = 86400;
-        uint256 timeInDay = time / dayInSeconds;
-        uint256 rate = 1;
-        uint256 totalStakingPool = IERC20(paymentToken).balanceOf(address(this));
-        uint256 rawYield = (stakingBalance[msg.sender] / totalStakingPool * timeInDay * rate) / 10**18;
-        return rawYield;
     }
 }
