@@ -26,6 +26,11 @@ module.exports = {
       chainId: 97,
       gasPrice: 20000000000,
       accounts: wallets
+    },
+    hardhat: {
+      forking: {
+        url: "https://bsc-dataseed1.defibit.io/",
+      }
     }
   },
   solidity: {
