@@ -1,5 +1,5 @@
 require("@nomiclabs/hardhat-waffle");
-require('dotenv').config();
+require("dotenv").config();
 
 const wallets = [process.env.HOLDER, process.env.WALLET];
 
@@ -9,7 +9,8 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
   const accounts = await hre.ethers.getSigners();
 
   for (const account of accounts) {
-    console.log(account.address);
+    const balance = await account.getBalance();
+    console.log(`${account.address}: ${balance} ether`);
   }
 });
 
@@ -25,24 +26,24 @@ module.exports = {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545",
       chainId: 97,
       gasPrice: 20000000000,
-      accounts: wallets
+      accounts: wallets,
     },
     hardhat: {
       forking: {
         url: "https://bsc-dataseed1.defibit.io/",
-      }
-    }
+      },
+    },
   },
   solidity: {
     version: "0.8.0",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200
-      }
+        runs: 200,
+      },
     },
   },
   paths: {
-    artifacts: "./client/artifacts"
-  }
+    artifacts: "./client/artifacts",
+  },
 };
