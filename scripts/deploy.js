@@ -14,22 +14,27 @@ async function main() {
   // manually to make sure everything is compiled
   // await hre.run('compile');
   const [holder, wallet1] = await ethers.getSigners();
-  console.log(`holder address: ${holder.address}, wallet1 address: ${wallet1.address}`);
+  console.log(
+    `holder address: ${holder.address}, wallet1 address: ${wallet1.address}`
+  );
 
   // We get the contract to deploy
-  const Wbtc = await ethers.getContractFactory("Wbtc", holder);
-  const wbtc = await Wbtc.deploy();
-  await wbtc.deployed();
-  console.log("Wbtc deployed to:", wbtc.address);
+  const wbtc = await ethers.deployContract("Wbtc");
+  await wbtc.waitForDeployment();
+  console.log("Wbtc deployed to:", wbtc.target);
 
   // Deploying staking contract
-  const Staking = await ethers.getContractFactory("Staking", wallet1);
-  const staking = await Staking.deploy();
+  const staking = await ethers.deployContract("Staking", wallet1);
+  await staking.waitForDeployment();
+
+  const stakingOwner = await staking.owner();
+  console.log("staking contract deploy to: ", staking.target);
+  console.log("stakingContract owner: ", stakingOwner);
 
   // whitelisting wbtc to staking contract
-  await staking.whitelistCoin('wbtc', wbtc.address);
-  const whitelistedAdd = await staking.whitelistedCoin('wbtc');
-  console.log('whitelistedCoin: ', whitelistedAdd);
+  await staking.whitelistCoin("wbtc", wbtc.target);
+  const whitelistedAdd = await staking.whitelistedCoin("wbtc");
+  console.log("whitelistedCoin: ", whitelistedAdd);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
