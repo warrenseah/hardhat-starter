@@ -1,5 +1,5 @@
-require("@nomiclabs/hardhat-waffle");
 require("dotenv").config();
+require("@nomicfoundation/hardhat-toolbox");
 
 const wallets = [process.env.HOLDER, process.env.WALLET];
 
@@ -28,14 +28,10 @@ module.exports = {
       gasPrice: 20000000000,
       accounts: wallets,
     },
-    hardhat: {
-      forking: {
-        url: "https://bsc-dataseed1.defibit.io/",
-      },
-    },
+    hardhat: {},
   },
   solidity: {
-    version: "0.8.0",
+    version: "0.8.19",
     settings: {
       optimizer: {
         enabled: true,
